@@ -1100,11 +1100,11 @@ namespace Dapper
                     object val = func(reader);
                     if (val == null || val is T)
                     {
-                        yield return (T)val;
+                        yield return GetTrackedModelOrResult((T)val);
                     }
                     else
                     {
-                        yield return (T)Convert.ChangeType(val, convertToType, CultureInfo.InvariantCulture);
+                        yield return GetTrackedModelOrResult((T)Convert.ChangeType(val, convertToType, CultureInfo.InvariantCulture));
                     }
                 }
                 while (reader.NextResult()) { /* ignore subsequent result sets */ }
@@ -1129,6 +1129,15 @@ namespace Dapper
                 if (wasClosed) cnn.Close();
                 cmd?.Dispose();
             }
+        }
+
+        private static T GetTrackedModelOrResult<T>(T result)
+        {
+            var model = result as Mailbird.Data.Models.ModelBase<T>;
+            if (model != null)
+                return model.TrackOrResetChanges(result, true);
+            else
+                return result;
         }
 
         [Flags]
@@ -1539,17 +1548,17 @@ namespace Dapper
             switch (otherDeserializers.Length)
             {
                 case 1:
-                    return r => ((Func<TFirst, TSecond, TReturn>)map)((TFirst)deserializer(r), (TSecond)otherDeserializers[0](r));
+                    return r => ((Func<TFirst, TSecond, TReturn>)map)(GetTrackedModelOrResult((TFirst)deserializer(r)), GetTrackedModelOrResult((TSecond)otherDeserializers[0](r)));
                 case 2:
-                    return r => ((Func<TFirst, TSecond, TThird, TReturn>)map)((TFirst)deserializer(r), (TSecond)otherDeserializers[0](r), (TThird)otherDeserializers[1](r));
+                    return r => ((Func<TFirst, TSecond, TThird, TReturn>)map)(GetTrackedModelOrResult((TFirst)deserializer(r)), GetTrackedModelOrResult((TSecond)otherDeserializers[0](r)), GetTrackedModelOrResult((TThird)otherDeserializers[1](r)));
                 case 3:
-                    return r => ((Func<TFirst, TSecond, TThird, TFourth, TReturn>)map)((TFirst)deserializer(r), (TSecond)otherDeserializers[0](r), (TThird)otherDeserializers[1](r), (TFourth)otherDeserializers[2](r));
+                    return r => ((Func<TFirst, TSecond, TThird, TFourth, TReturn>)map)(GetTrackedModelOrResult((TFirst)deserializer(r)), GetTrackedModelOrResult((TSecond)otherDeserializers[0](r)), GetTrackedModelOrResult((TThird)otherDeserializers[1](r)), GetTrackedModelOrResult((TFourth)otherDeserializers[2](r)));
                 case 4:
-                    return r => ((Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>)map)((TFirst)deserializer(r), (TSecond)otherDeserializers[0](r), (TThird)otherDeserializers[1](r), (TFourth)otherDeserializers[2](r), (TFifth)otherDeserializers[3](r));
+                    return r => ((Func<TFirst, TSecond, TThird, TFourth, TFifth, TReturn>)map)(GetTrackedModelOrResult((TFirst)deserializer(r)), GetTrackedModelOrResult((TSecond)otherDeserializers[0](r)), GetTrackedModelOrResult((TThird)otherDeserializers[1](r)), GetTrackedModelOrResult((TFourth)otherDeserializers[2](r)), GetTrackedModelOrResult((TFifth)otherDeserializers[3](r)));
                 case 5:
-                    return r => ((Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn>)map)((TFirst)deserializer(r), (TSecond)otherDeserializers[0](r), (TThird)otherDeserializers[1](r), (TFourth)otherDeserializers[2](r), (TFifth)otherDeserializers[3](r), (TSixth)otherDeserializers[4](r));
+                    return r => ((Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TReturn>)map)(GetTrackedModelOrResult((TFirst)deserializer(r)), GetTrackedModelOrResult((TSecond)otherDeserializers[0](r)), GetTrackedModelOrResult((TThird)otherDeserializers[1](r)), GetTrackedModelOrResult((TFourth)otherDeserializers[2](r)), GetTrackedModelOrResult((TFifth)otherDeserializers[3](r)), GetTrackedModelOrResult((TSixth)otherDeserializers[4](r)));
                 case 6:
-                    return r => ((Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>)map)((TFirst)deserializer(r), (TSecond)otherDeserializers[0](r), (TThird)otherDeserializers[1](r), (TFourth)otherDeserializers[2](r), (TFifth)otherDeserializers[3](r), (TSixth)otherDeserializers[4](r), (TSeventh)otherDeserializers[5](r));
+                    return r => ((Func<TFirst, TSecond, TThird, TFourth, TFifth, TSixth, TSeventh, TReturn>)map)(GetTrackedModelOrResult((TFirst)deserializer(r)), GetTrackedModelOrResult((TSecond)otherDeserializers[0](r)), GetTrackedModelOrResult((TThird)otherDeserializers[1](r)), GetTrackedModelOrResult((TFourth)otherDeserializers[2](r)), GetTrackedModelOrResult((TFifth)otherDeserializers[3](r)), GetTrackedModelOrResult((TSixth)otherDeserializers[4](r)), GetTrackedModelOrResult((TSeventh)otherDeserializers[5](r)));
                 default:
                     throw new NotSupportedException();
             }

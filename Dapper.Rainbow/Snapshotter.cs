@@ -30,8 +30,8 @@ namespace Dapper
         {
             private static Func<T, T> cloner;
             private static Func<T, T, List<Change>> differ;
-            private readonly T memberWiseClone;
-            private readonly T trackedObject;
+            private T memberWiseClone;
+            private T trackedObject;
 
             /// <summary>
             /// Creates a snapshot from an object.
@@ -39,8 +39,18 @@ namespace Dapper
             /// <param name="original">The original object to snapshot.</param>
             public Snapshot(T original)
             {
+                Initialize(original);
+            }
+
+            private void Initialize(T original)
+            {
                 memberWiseClone = Clone(original);
                 trackedObject = original;
+            }
+
+            public void Reset()
+            {
+                Initialize(trackedObject);
             }
 
             /// <summary>
@@ -67,6 +77,11 @@ namespace Dapper
                 return Diff(memberWiseClone, trackedObject);
             }
 
+            public T GetClone()
+            {
+                return memberWiseClone;
+            }
+
             private static T Clone(T myObject)
             {
                 cloner = cloner ?? GenerateCloner();
@@ -86,14 +101,16 @@ namespace Dapper
 
             private static List<PropertyInfo> RelevantProperties()
             {
-                return typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                    .Where(p =>
-                        p.GetSetMethod(true) != null
-                        && p.GetGetMethod(true) != null
-                        && (p.PropertyType == typeof(string)
-                             || p.PropertyType.IsValueType()
-                             || (p.PropertyType.IsGenericType() && p.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>)))
-                        ).ToList();
+                return Mailbird.Data.Models.ModelBase<T>.GetProperties().ToList();
+
+                //return typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                //    .Where(p =>
+                //        p.GetSetMethod(true) != null
+                //        && p.GetGetMethod(true) != null
+                //        && (p.PropertyType == typeof(string)
+                //             || p.PropertyType.IsValueType()
+                //             || (p.PropertyType.IsGenericType() && p.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>)))
+                //        ).ToList();
             }
 
             private static bool AreEqual<U>(U first, U second)

@@ -374,11 +374,11 @@ namespace Dapper
                         object val = deserializer(reader);
                         if (val == null || val is T)
                         {
-                            yield return (T)val;
+                            yield return GetTrackedModelOrResult((T)val);
                         }
                         else
                         {
-                            yield return (T)Convert.ChangeType(val, convertToType, CultureInfo.InvariantCulture);
+                            yield return GetTrackedModelOrResult((T)Convert.ChangeType(val, convertToType, CultureInfo.InvariantCulture));
                         }
                     }
                 }
