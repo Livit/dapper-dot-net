@@ -8,6 +8,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -18,6 +19,8 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Xml;
 using System.Xml.Linq;
+using Mailbird.Util;
+using Newtonsoft.Json;
 
 #if NETSTANDARD1_3
 using DataException = System.InvalidOperationException;
@@ -549,7 +552,16 @@ namespace Dapper
                                 cmd.Parameters.Clear(); // current code is Add-tastic
                             }
                             info.ParamReader(cmd, obj);
-                            total += cmd.ExecuteNonQuery();
+
+                            try
+                            {
+                                total += cmd.ExecuteNonQuery();
+                            }
+                            catch (DbException ex)
+                            {
+                                LogExecutionException(ex, cmd.CommandText, obj);
+                                throw;
+                            }
                         }
                     }
                     command.OnCompleted();
@@ -568,6 +580,15 @@ namespace Dapper
                 info = GetCacheInfo(identity, param, command.AddToCache);
             }
             return ExecuteCommand(cnn, ref command, param == null ? null : info.ParamReader);
+        }
+
+        private static void LogExecutionException(Exception ex, string sql, object param = null)
+        {
+            try
+            {
+                Log.WriteExceptionAsync(LogLevel.Info, ex, "{0} | {1}", sql, JsonConvert.SerializeObject(param));
+            }
+            catch { }
         }
 
         /// <summary>
@@ -1050,15 +1071,23 @@ namespace Dapper
         {
             try
             {
-                return cmd.ExecuteReader(GetBehavior(wasClosed, behavior));
-            }
-            catch (ArgumentException ex)
-            { // thanks, Sqlite!
-                if (Settings.DisableCommandBehaviorOptimizations(behavior, ex))
+                try
                 {
-                    // we can retry; this time it will have different flags
                     return cmd.ExecuteReader(GetBehavior(wasClosed, behavior));
                 }
+                catch (ArgumentException ex)
+                { // thanks, Sqlite!
+                    if (Settings.DisableCommandBehaviorOptimizations(behavior, ex))
+                    {
+                        // we can retry; this time it will have different flags
+                        return cmd.ExecuteReader(GetBehavior(wasClosed, behavior));
+                    }
+                    throw;
+                }
+            }
+            catch (DbException ex)
+            {
+                LogExecutionException(ex, cmd.CommandText);
                 throw;
             }
         }
@@ -2837,6 +2866,11 @@ namespace Dapper
                 command.OnCompleted();
                 return result;
             }
+            catch (DbException ex)
+            {
+                LogExecutionException(ex, cmd.CommandText, command.Parameters);
+                throw;
+            }
             finally
             {
                 if (wasClosed) cnn.Close();
@@ -2863,6 +2897,11 @@ namespace Dapper
                 if (wasClosed) cnn.Open();
                 result = cmd.ExecuteScalar();
                 command.OnCompleted();
+            }
+            catch (DbException ex)
+            {
+                LogExecutionException(ex, cmd.CommandText, command.Parameters);
+                throw;
             }
             finally
             {
