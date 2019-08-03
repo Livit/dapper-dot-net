@@ -10,6 +10,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -19,8 +20,10 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Xml;
 using System.Xml.Linq;
+using Mailbird.Data.Models;
 using Mailbird.Util;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 #if NETSTANDARD1_3
 using DataException = System.InvalidOperationException;
@@ -582,14 +585,96 @@ namespace Dapper
             return ExecuteCommand(cnn, ref command, param == null ? null : info.ParamReader);
         }
 
+        #region LOGGING
+
+        //private static ConcurrentDictionary<Type, object> _loggedTypes = new ConcurrentDictionary<Type, object>();
+        //private static void TestLogExecutionException(string sql, object param)
+        //{
+        //    if (!Tools.IsDebugMol || param == null)
+        //        return;
+
+        //    if (_loggedTypes.TryAdd(param.GetType(), null))
+        //        LogExecutionException(new Exception(), sql, param);
+        //}
+
         private static void LogExecutionException(Exception ex, string sql, object param = null)
         {
+            // Can also decorate the body, password and a few others with JsonIgnore: https://www.newtonsoft.com/json/help/html/SerializationAttributes.htm
             try
             {
-                Log.WriteExceptionAsync(LogLevel.Info, ex, "{0} | {1}", sql, JsonConvert.SerializeObject(param));
+                Log.WriteExceptionAsync(LogLevel.Info, ex, "{0} | {1}", sql, SerializeObject(param));
             }
-            catch { }
+            catch (Exception subEx)
+            {
+                Log.WriteExceptionAsync(LogLevel.Warn, subEx, "Error logging SQL following exception");
+            }
         }
+
+        private static string SerializeObject(object value)
+        {
+            JsonSerializer serializer = new JsonSerializer();
+
+            using (var sw = new StringWriter())
+            using (var writer = new StringReplaceWriter(sw))
+            {
+                serializer.ContractResolver = new IgnoreUnmappedPropertiesContractResolver();
+                serializer.Serialize(writer, value);
+
+                return sw.ToString();
+            }
+        }
+
+        private class StringReplaceWriter : JsonTextWriter
+        {
+            public StringReplaceWriter(TextWriter textWriter)
+                : base(textWriter) { }
+
+            public override void WriteValue(string value)
+            {
+                // Don't write strings like the encrypted password, authentication tokens etc.
+                // Only keep email addresses which in most cases makes it easier for us to debug
+                if (!string.IsNullOrWhiteSpace(value) && !Tools.IsEmail(value))
+                    value = GetReplaceString(value.Length);
+
+                base.WriteValue(value);
+            }
+
+            public override void WriteValue(byte[] value)
+            {
+                // Don't serialize byte arrays like the message bodies
+                if (value.Length > 0)
+                    base.WriteValue(GetReplaceString(value.Length));
+                else
+                    base.WriteValue(value);
+            }
+
+            private string GetReplaceString(int valueLength)
+            {
+                return $"[{valueLength}]";
+            }
+        }
+
+        public class IgnoreUnmappedPropertiesContractResolver : DefaultContractResolver
+        {
+            protected override IList<JsonProperty> CreateProperties(Type type, MemberSerialization memberSerialization)
+            {
+                // Filter out our properties not mapped to the database
+                return base.CreateProperties(type, memberSerialization)
+                    .Where(p =>
+                    {
+                        // 'prop != null' because we only want properties, not fields like 'SnapshotUowLock' which Newtonsoft returns as well
+                        // FolderModel.Parent is defined with new to hide the base Parent. In that case we want the FolderModel one, which will be the first one
+                        var prop = p.DeclaringType.GetProperties().FirstOrDefault(x => x.Name == p.PropertyName);
+                        if (prop != null && !prop.CustomAttributes.Any(a => a.AttributeType == typeof(NotMappedAttribute)))
+                            return true;
+
+                        return false;
+                    })
+                    .ToList();
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// Execute parameterized SQL and return an <see cref="IDataReader"/>.
